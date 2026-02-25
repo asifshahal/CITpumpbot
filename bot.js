@@ -146,8 +146,8 @@ async function checkPools() {
             await bot.sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: true });
             console.log(`Alert sent for pool ${pool.name} (${pool.address})`);
             alertedPools[pool.address] = now; // Update cooldown
-            // Add delay to prevent Telegram '429 Too Many Requests' errors
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            // Add delay to prevent Telegram '429 Too Many Requests' errors (4000ms = 15 msg/min, safe margin)
+            await new Promise(resolve => setTimeout(resolve, 4000));
         } catch (error) {
             console.error(`Failed to send message for pool ${pool.address}:`, error.message);
         }
@@ -159,9 +159,21 @@ bot.on('ready', () => {
     console.log('Bot is running and listening for commands/events.');
 });
 
-// Run loop
-setInterval(checkPools, checkIntervalMinutes * 60 * 1000);
-checkPools(); // Run initially
+// Prevent overlap overlapping interval loops by using sequential async while loop
+async function startBot() {
+    console.log('Bot is starting up the polling loop...');
+    while (true) {
+        try {
+            await checkPools();
+        } catch (error) {
+            console.error('Error in polling loop:', error);
+        }
+        // Wait the configured interval before checking again
+        await new Promise(resolve => setTimeout(resolve, checkIntervalMinutes * 60 * 1000));
+    }
+}
+
+startBot();
 
 // Simple test command
 bot.onText(/\/ping/, (msg) => {
