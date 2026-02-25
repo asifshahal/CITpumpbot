@@ -93,15 +93,10 @@ function formatMessage(pool, organicScore, priceChange5m, holders, mcap) {
 
 async function checkPools() {
     console.log(`[${new Date().toISOString()}] Checking Meteora API for hot pools...`);
-    const pools = await fetchMeteoraPools();
-    if (!pools || pools.length === 0) {
-        console.log('No pools fetched.');
-        return;
-    }
-
     const now = Date.now();
+    const hotPools = [];
 
-    for (const pool of pools) {
+    await fetchMeteoraPools((pool) => {
         // Extract required fields for threshold check
         let feeTvl30min = pool.fee_tvl_ratio && pool.fee_tvl_ratio.min_30 ? parseFloat(pool.fee_tvl_ratio.min_30) : 0;
         if (feeTvl30min < 1) feeTvl30min *= 100; // Convert to percentage
@@ -111,7 +106,7 @@ async function checkPools() {
 
         // Rule: TVL Filter (Min TVL required)
         if (poolTvl < minTvlThresholdUSD) {
-            continue;
+            return;
         }
 
         // Rule: Alert when Fee/TVL 30min >= threshold OR 30min Fees >= threshold
@@ -120,32 +115,41 @@ async function checkPools() {
             // Check Cooldown: Same pool won't trigger alerts within 5 minutes
             const lastAlerted = alertedPools[pool.address] || 0;
             if (now - lastAlerted < COOLDOWN_MS) {
-                continue; // Skip, still in cooldown
+                return; // Skip, still in cooldown
             }
 
-            // Rule: Organic Score Filter > 60
-            const organicScore = await getOrganicScore(pool.address);
-            if (organicScore <= 80) {
-                continue; // Skip, organic score is too low
-            }
+            hotPools.push(pool);
+        }
+    });
 
-            // External fields not in Meteora native API (Mocked for screenshot fidelity)
-            // In a real app, you would fetch these from DexScreener/GMGN
-            const mock5mPriceChange = -5.51;
-            const mockHolders = 1535;
-            const mockMcap = 537000;
+    if (hotPools.length === 0) {
+        console.log('No hot pools found in this cycle.');
+        return;
+    }
 
-            const text = formatMessage(pool, organicScore, mock5mPriceChange, mockHolders, mockMcap);
+    for (const pool of hotPools) {
+        // Rule: Organic Score Filter > 80
+        const organicScore = await getOrganicScore(pool.address);
+        if (organicScore <= 80) {
+            continue; // Skip, organic score is too low
+        }
 
-            try {
-                await bot.sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: true });
-                console.log(`Alert sent for pool ${pool.name} (${pool.address})`);
-                alertedPools[pool.address] = now; // Update cooldown
-                // Add delay to prevent Telegram '429 Too Many Requests' errors
-                await new Promise(resolve => setTimeout(resolve, 3000));
-            } catch (error) {
-                console.error(`Failed to send message for pool ${pool.address}:`, error.message);
-            }
+        // External fields not in Meteora native API (Mocked for screenshot fidelity)
+        // In a real app, you would fetch these from DexScreener/GMGN
+        const mock5mPriceChange = -5.51;
+        const mockHolders = 1535;
+        const mockMcap = 537000;
+
+        const text = formatMessage(pool, organicScore, mock5mPriceChange, mockHolders, mockMcap);
+
+        try {
+            await bot.sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+            console.log(`Alert sent for pool ${pool.name} (${pool.address})`);
+            alertedPools[pool.address] = now; // Update cooldown
+            // Add delay to prevent Telegram '429 Too Many Requests' errors
+            await new Promise(resolve => setTimeout(resolve, 3000));
+        } catch (error) {
+            console.error(`Failed to send message for pool ${pool.address}:`, error.message);
         }
     }
 }

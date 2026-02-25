@@ -1,20 +1,26 @@
 const axios = require('axios');
+const JSONStream = require('JSONStream');
 
-async function fetchMeteoraPools() {
+async function fetchMeteoraPools(onPool) {
     try {
-        // Fetch all Meteora DLMM pairs
-        const response = await axios.get('https://dlmm-api.meteora.ag/pair/all', {
+        const response = await axios({
+            method: 'get',
+            url: 'https://dlmm-api.meteora.ag/pair/all',
+            responseType: 'stream',
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
         });
 
-        // The API returns an array of pool objects
-        if (Array.isArray(response.data)) {
-            return response.data;
-        }
-        return [];
+        return new Promise((resolve, reject) => {
+            const stream = response.data.pipe(JSONStream.parse('*'));
+            stream.on('data', pool => {
+                if (onPool) onPool(pool);
+            });
+            stream.on('end', () => resolve());
+            stream.on('error', err => reject(err));
+        });
     } catch (error) {
         console.error('Error fetching Meteora API:', error.message);
-        return [];
+        return false;
     }
 }
 
