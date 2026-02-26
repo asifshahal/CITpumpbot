@@ -134,8 +134,8 @@ async function checkPools() {
             continue; // Skip, organic score is too low
         }
 
-        // Fetch real market data from DexScreener
-        const dexData = await getDexScreenerData(pool.address);
+        // Fetch real market data from DexScreener using the base token address
+        const dexData = await getDexScreenerData(pool.mint_x);
 
         // Holders not available via DexScreener free API, generate a plausible value based on TVL
         const poolTvlStr = parseFloat(pool.liquidity || pool.tvl || '0');

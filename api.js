@@ -31,19 +31,21 @@ async function getOrganicScore(poolAddress) {
     return 85.0;
 }
 
-// Fetch market data from DexScreener
-async function getDexScreenerData(poolAddress) {
+// Fetch market data from DexScreener using base token address (mint_x/mint_y)
+async function getDexScreenerData(tokenAddress) {
     try {
-        const response = await axios.get(`https://api.dexscreener.com/latest/dex/pairs/solana/${poolAddress}`);
+        const response = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
         if (response.data && response.data.pairs && response.data.pairs.length > 0) {
-            const pair = response.data.pairs[0];
+            // Sort by liquidity to get the most representative pair for the token
+            const sortedPairs = response.data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+            const pair = sortedPairs[0];
             return {
                 priceChange5m: pair.priceChange?.m5 || 0,
                 mcap: pair.fdv || pair.marketCap || 0
             };
         }
     } catch (error) {
-        console.error(`Error fetching DexScreener data for ${poolAddress}:`, error.message);
+        console.error(`Error fetching DexScreener data for token ${tokenAddress}:`, error.message);
     }
     // Fallback if not found on DexScreener
     return {
